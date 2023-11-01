@@ -1,7 +1,7 @@
 ## HEADER---------------------------
 ## Script name: 00-initialization and setup for packages, dependant software, google account
 ##
-## Purpose of script: to faciliate furhter data extraction and manipulation, this script should be run first if starting on a new computer.
+## Purpose of script: to faciliate further data extraction and manipulation, this script should be run first if starting on a new computer. Be cautioned though, it can be a pain in the ass to get working properly.
 ##
 ## Author: Andrew Habrich
 ##
@@ -14,37 +14,51 @@
 ## Notes ---------------------------
 
 ## 1. Load relevant packages--------
-
-#install.packages("remotes", "reticulate")
 #remotes::install_github("r-spatial/rgee") #download the latest version from github
 ### INSTALLATION INSTRUCTIONS FROM https://r-spatial.github.io/rgee/articles/rgee01.html ###
 # load packages -----------------------------------------------------------
 library(rgee)
+library(reticulate)
 
 # initialization ----------------------------------------------------------
 # Install rgee Python dependencies into a rgee virtual environment
 ### You need the latest earth engine API, and the numpy package installed. 
 ### NOTE; if using R studio, select the 'python interpreter' in the Tools > Global options > Python
 ### Use either anaconda or miniconda to create the 'environment' where the APIs will be installed.
-### You also have to install GCLOUD SDK to interface with google credentials. 
-### You ALSO have to activate your gmail account with earth engine: https://code.earthengine.google.com/register
 
-ee_check() #make sure all python dependencies and credentials are valid
-ee_check_python()
-ee_check_credentials()
-ee_check_python_packages()
+### You also have to install GCLOUD SDK to interface with google credentials. 
+#### https://cloud.google.com/sdk/docs/install?hl=en
+
+### You ALSO have to activate your gmail account with earth engine: 
+#### https://code.earthengine.google.com/register
+
+Sys.getenv()
+# Sys.setenv(RETICULATE_PYTHON = "C:/Users/andrh/anaconda3/python.exe")
+#rgee::ee_install()
+#rgee::ee_clean_pyenv(Renviron = "global")
+
+## RUN EE_INSTALL() if you are unfamiliar with python
+
+## Check the python configuration
+reticulate::py_available()
+reticulate::py_config()
+reticulate::py_discover_config()
+
+# reticulate::py_set_item(name = 'ee', value = "C:/Users/andrh/anaconda3/Lib/site-packages/ee")
+#make sure all python dependencies and credentials are valid
+rgee::ee_check()
+rgee::ee_check_python()
+rgee::ee_check_python_packages()
 
 # session management
-ee_get_earthengine_path() #authorization token stored here
+rgee::ee_Authenticate()
+rgee::ee_Initialize(user = 'andrhabr@gmail.com', credentials = "persistent")
 
-ee_Initialize(user = 'andrhabr@gmail.com', credentials = "persistent")
-ee_version() #what version of ee API is being run?
-ee_user_info()
-
+rgee::ee_version() #what version of ee API is being run?
+ee_user_info() #authorization token stored here
 
 # Test the installation ----------------------------------------------------
 # If everything installed correctly, there should be a python environment with the earth engine and dependent packages installed and a a connection to google earth engine through your google account
-
 
 ## Download elevation data
 srtm <- ee$Image("USGS/SRTMGL1_003") #download SRTM elevation data layer from NASA and USGS
