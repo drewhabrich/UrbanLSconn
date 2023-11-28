@@ -52,7 +52,7 @@ if (!file.exists("./raw_data/ebd_can_obsdata.txt")) {
 auk_filter(auk_filt_canada, 
            file = "./raw_data/ebd_can_obsdata.txt", 
            file_sampling = "./raw_data/ebd_can_sampdata.txt", 
-           filter_sampling=T, overwrite = F)
+           filter_sampling = T, overwrite = F)
 }
 end_time <- Sys.time()
 end_time - start_time ##Time difference of 1.734443 hours
@@ -89,112 +89,112 @@ for (i in 1:length(city_filters)) {
 
 ## 3.0. Zero-filling presence/absence checklists ----
 ## Clear the R environment
-rm(list=ls())
-## read in the filtered ebird subset
-path <- "./raw_data/"
-ebd_on <- read_ebd("./raw_data/ebd_ontario_obsdata.txt", unique=T) 
-ebdsamp_on <- read_sampling("./raw_data/ebd_ontario_sampdata.txt")
-
-## take a peek at the dataset
-glimpse(ebd_on)
-
-### Zero-filling and tidying
-zf <- auk_zerofill(ebd_on, ebdsamp_on, collapse=T)
-# function to convert time observation to hours since midnight
-time_to_decimal <- function(x) {
-  x <- hms(x, quiet = TRUE)
-  hour(x) + minute(x) / 60 + second(x) / 3600
-}
-# clean up variables
-zf <- zf %>% 
-  mutate(
-    # convert X to NA
-    observation_count = if_else(observation_count == "X", NA_character_, observation_count),
-    observation_count = as.integer(observation_count),
-    # effort_distance_km to 0 for non-travelling counts
-    effort_distance_km = if_else(protocol_type != "Traveling", 0, effort_distance_km),
-    # convert duration to hours
-    effort_hours = duration_minutes / 60,
-    # speed km/h
-    effort_speed_kmph = effort_distance_km / effort_hours,
-    # convert time to decimal hours since midnight
-    hours_of_day = time_to_decimal(time_observations_started),
-    # split date into year and day of year
-    year = year(observation_date),
-    day_of_year = yday(observation_date)
-  )
-# additional filtering
-zf_filtered <- zf %>% 
-  filter(effort_hours <= 6,
-         effort_distance_km <= 10,
-         effort_speed_kmph <= 100,
-         number_observers <= 10)
-
-### 3.1 Test-training split to evaluate models ----
-zf_split <- zf_filtered %>% 
-  mutate(type = if_else(runif(nrow(.)) <= 0.8, "train", "test"))
-# confirm the proportion in each set is correct
-table(zf_split$type) / nrow(zf_split)
-
-# remove some redundant columns and save to .csv for analysis
-checklists <- zf_split %>% 
-  select(checklist_id, observer_id, type,
-         observation_count, species_observed, 
-         state_code, locality_id, latitude, longitude,
-         protocol_type, all_species_reported,
-         observation_date, year, day_of_year,
-         hours_of_day, 
-         effort_hours, effort_distance_km, effort_speed_kmph,
-         number_observers)
-write_csv(checklists, "./output/04-checklists-zf_can-on.csv", na = "")
-
-### 3.2 Explore the zero-filled data
-## setup map for Visualize
-map_proj <- st_crs("EPSG:4326")
-
-ne_land <- read_sf("./data/01-NA_gis_data.gpkg", "ne_land") %>% 
-  st_transform(crs = map_proj) %>% 
-  st_geometry()
-ne_country_lines <- read_sf("./data/01-NA_gis_data.gpkg", "ne_country_lines") %>% 
-  st_transform(crs = map_proj) %>% 
-  st_geometry()
-ne_state_lines <- read_sf("./data/01-NA_gis_data.gpkg", "ne_adm1_lines") %>% 
-  st_transform(crs = map_proj) %>% 
-  st_geometry()
-on_boundary <- read_sf("./data/01-NA_gis_data.gpkg", "ne_adm1") %>% 
-  filter(adm1_code == "CA-ON") %>% 
-  st_transform(crs = map_proj) %>% 
-  st_geometry()
-
-## read in zero-filled checklists
-mtl <- read_ebd("./raw_data/ebd_Montréal_5kmbuff.txt", unique=T)
-mtl_s<- read_sampling("./raw_data/ebdsamp_Montréal_5kmbuff.txt")
-
-mtl_sf <- mtl %>% 
-  select(longitude, latitude) %>% 
-  st_as_sf( coords = c("longitude", "latitude"), crs = 4326)
-mtl_s_sf <- mtl_s %>% 
-  select(longitude, latitude) %>% 
-  st_as_sf( coords = c("longitude", "latitude"), crs = 4326)
-
-## find points inside the polygon buffer
-mtla <- st_within(mtl_sf, cancities %>% slice(16), sparse = F)
-mtlb <- st_within(mtl_s_sf, cancities %>% slice(16), sparse = F)
-
-# subset data frame
-mtl_checklists <- mtl[mtla[, 1], ]
-mtl_sampling <- mtl_s[mtlb[, 1], ]
-
-# Make a quick map
-par(mar = c(0, 0, 0, 0))
-plot(ne_land, col = "#dddddd", border = "#888888", lwd = 0.5)
-plot(ne_state_lines, col = "#ffffff", lwd = 0.75, add = TRUE)
-plot(ne_country_lines, col = "#ffffff", lwd = 1.5, add = TRUE)
-plot(cancities %>% slice(16) %>% st_geometry(), col = "grey40", border = NA, add = TRUE)
-plot(mtl_sf, col = "black", pch = 19, cex = 0.5, add = TRUE)
-plot(mtl_sf[mtla[, 1], ], 
-     col = "forestgreen", pch = 19, cex = 0.5, 
-     add = TRUE)
-
-mtl_zf <- auk_zerofill(mtl_checklists, mtl_sampling, collapse=T)
-
+# rm(list=ls())
+# ## read in the filtered ebird subset
+# path <- "./raw_data/"
+# ebd_on <- read_ebd("./raw_data/ebd_ontario_obsdata.txt", unique=T) 
+# ebdsamp_on <- read_sampling("./raw_data/ebd_ontario_sampdata.txt")
+# 
+# ## take a peek at the dataset
+# glimpse(ebd_on)
+# 
+# ### Zero-filling and tidying
+# zf <- auk_zerofill(ebd_on, ebdsamp_on, collapse=T)
+# # function to convert time observation to hours since midnight
+# time_to_decimal <- function(x) {
+#   x <- hms(x, quiet = TRUE)
+#   hour(x) + minute(x) / 60 + second(x) / 3600
+# }
+# # clean up variables
+# zf <- zf %>% 
+#   mutate(
+#     # convert X to NA
+#     observation_count = if_else(observation_count == "X", NA_character_, observation_count),
+#     observation_count = as.integer(observation_count),
+#     # effort_distance_km to 0 for non-travelling counts
+#     effort_distance_km = if_else(protocol_type != "Traveling", 0, effort_distance_km),
+#     # convert duration to hours
+#     effort_hours = duration_minutes / 60,
+#     # speed km/h
+#     effort_speed_kmph = effort_distance_km / effort_hours,
+#     # convert time to decimal hours since midnight
+#     hours_of_day = time_to_decimal(time_observations_started),
+#     # split date into year and day of year
+#     year = year(observation_date),
+#     day_of_year = yday(observation_date)
+#   )
+# # additional filtering
+# zf_filtered <- zf %>% 
+#   filter(effort_hours <= 6,
+#          effort_distance_km <= 10,
+#          effort_speed_kmph <= 100,
+#          number_observers <= 10)
+# 
+# ### 3.1 Test-training split to evaluate models ----
+# zf_split <- zf_filtered %>% 
+#   mutate(type = if_else(runif(nrow(.)) <= 0.8, "train", "test"))
+# # confirm the proportion in each set is correct
+# table(zf_split$type) / nrow(zf_split)
+# 
+# # remove some redundant columns and save to .csv for analysis
+# checklists <- zf_split %>% 
+#   select(checklist_id, observer_id, type,
+#          observation_count, species_observed, 
+#          state_code, locality_id, latitude, longitude,
+#          protocol_type, all_species_reported,
+#          observation_date, year, day_of_year,
+#          hours_of_day, 
+#          effort_hours, effort_distance_km, effort_speed_kmph,
+#          number_observers)
+# write_csv(checklists, "./output/04-checklists-zf_can-on.csv", na = "")
+# 
+# ### 3.2 Explore the zero-filled data
+# ## setup map for Visualize
+# map_proj <- st_crs("EPSG:4326")
+# 
+# ne_land <- read_sf("./data/01-NA_gis_data.gpkg", "ne_land") %>% 
+#   st_transform(crs = map_proj) %>% 
+#   st_geometry()
+# ne_country_lines <- read_sf("./data/01-NA_gis_data.gpkg", "ne_country_lines") %>% 
+#   st_transform(crs = map_proj) %>% 
+#   st_geometry()
+# ne_state_lines <- read_sf("./data/01-NA_gis_data.gpkg", "ne_adm1_lines") %>% 
+#   st_transform(crs = map_proj) %>% 
+#   st_geometry()
+# on_boundary <- read_sf("./data/01-NA_gis_data.gpkg", "ne_adm1") %>% 
+#   filter(adm1_code == "CA-ON") %>% 
+#   st_transform(crs = map_proj) %>% 
+#   st_geometry()
+# 
+# ## read in zero-filled checklists
+# mtl <- read_ebd("./raw_data/ebd_Montréal_5kmbuff.txt", unique=T)
+# mtl_s<- read_sampling("./raw_data/ebdsamp_Montréal_5kmbuff.txt")
+# 
+# mtl_sf <- mtl %>% 
+#   select(longitude, latitude) %>% 
+#   st_as_sf( coords = c("longitude", "latitude"), crs = 4326)
+# mtl_s_sf <- mtl_s %>% 
+#   select(longitude, latitude) %>% 
+#   st_as_sf( coords = c("longitude", "latitude"), crs = 4326)
+# 
+# ## find points inside the polygon buffer
+# mtla <- st_within(mtl_sf, cancities %>% slice(16), sparse = F)
+# mtlb <- st_within(mtl_s_sf, cancities %>% slice(16), sparse = F)
+# 
+# # subset data frame
+# mtl_checklists <- mtl[mtla[, 1], ]
+# mtl_sampling <- mtl_s[mtlb[, 1], ]
+# 
+# # Make a quick map
+# par(mar = c(0, 0, 0, 0))
+# plot(ne_land, col = "#dddddd", border = "#888888", lwd = 0.5)
+# plot(ne_state_lines, col = "#ffffff", lwd = 0.75, add = TRUE)
+# plot(ne_country_lines, col = "#ffffff", lwd = 1.5, add = TRUE)
+# plot(cancities %>% slice(16) %>% st_geometry(), col = "grey40", border = NA, add = TRUE)
+# plot(mtl_sf, col = "black", pch = 19, cex = 0.5, add = TRUE)
+# plot(mtl_sf[mtla[, 1], ], 
+#      col = "forestgreen", pch = 19, cex = 0.5, 
+#      add = TRUE)
+# 
+# mtl_zf <- auk_zerofill(mtl_checklists, mtl_sampling, collapse=T)
+# 
