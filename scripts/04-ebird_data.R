@@ -6,6 +6,7 @@
 ## Author: Andrew Habrich
 ##
 ## Date Created: 2023-08-21
+## Date last modified: 2023-11-23
 ##
 ## Email: 
 ## - andrhabr@gmail.com
@@ -22,12 +23,12 @@ library(rnaturalearth)
 
 ### 1.1. Define path to ebird data and sampling info ----
 #auk::auk_set_ebd_path(path = "F:/DATA/ebird/") ## Run once and restart, should remember between sessions
-#auk::auk_get_ebd_path()
+auk::auk_get_ebd_path()
 ### create the ebd object to keep track of defined filters and input data
 ebd <- auk_ebd(file = "ebd_relJul-2023.txt", #this is the .txt with the data
              file_sampling = "ebd_sampling_relJul-2023.txt") #this is the .txt with info on the sampling
 
-### 1.2 Define filters for the ebd ----
+### 1.2 check filter options for the ebird dataset ----
 ### Define filters for the ebd (MORE filters, means smaller, more work-able dataset)
 ## FIRST; what countries and administrative zones can we filter by?
 ebird_states %>% filter(country_code %in% c('CA')) %>% head(10)
@@ -35,48 +36,30 @@ valid_protocols #what protcols can we filter by?
 
 ## SECOND; define the filters to get relevant research quality data
 ### See options here; https://cornelllabofornithology.github.io/auk/articles/auk.html
-auk_filt_on <- ebd %>% 
-  auk_country(country = "CA") %>% 
-  auk_state(state = "CA-ON") %>% 
-  auk_protocol(protocol = c("Stationary", "Traveling", "Area")) %>% #stationary, transect, or area-based sampling
-  auk_duration(duration = c(5, 240)) %>% 
-  auk_distance(distance = c(5, 15), distance_units = "km") %>% 
-  auk_date(date = c("*-03-01", "*-08-31")) %>% #breeding bird season in CANADA
-  auk_year(year = c(2012, 2022)) %>% #last 10 years of data
-  auk_complete() #ONLY completed checklists
-  
-## THIRD; Run filter and save files to raw_data directory
-can_on_ebd <- file.path("./raw_data", "ebd_ontario_obsdata.txt")
-can_on_samp <- file.path("./raw_data", "ebd_ontario_sampdata.txt")
-
-# only run if the files don't already exist
-# This will create 2 files that are filtered according to the criteria above
-# 1 file for the filtered data, 1 file for the filtered sampling data
-if (!file.exists(can_on_ebd)) {
-  auk_filter(auk_filt_on, file = can_on_ebd, file_sampling = can_on_samp)
-}
 
 ### 1.3 Filter to just Canada data (should be smaller to extract data from) ----
 auk_filt_canada <- ebd %>% 
   auk_country(country = "CA") %>% 
   auk_protocol(protocol = c("Stationary", "Traveling", "Area")) %>% #stationary, transect, or area-based sampling
   auk_duration(duration = c(5, 240)) %>% 
-  auk_distance(distance = c(5, 15), distance_units = "km") %>% 
+  auk_distance(distance = c(2, 15), distance_units = "km") %>% 
   auk_date(date = c("*-03-01", "*-08-31")) %>% #breeding bird season in CANADA
-  auk_year(year = c(2012, 2022)) %>% #last 10 years of data
+  auk_year(year = c(2010:2022)) %>% #last 12 years of data
   auk_complete() #ONLY completed checklists
 
 start_time <- Sys.time()
-auk_filter(auk_filt_canada, file = "./raw_data/ebd_can_obsdata.txt", 
+if (!file.exists("./raw_data/ebd_can_obsdata.txt")) {
+auk_filter(auk_filt_canada, 
+           file = "./raw_data/ebd_can_obsdata.txt", 
            file_sampling = "./raw_data/ebd_can_sampdata.txt", 
            filter_sampling=T, overwrite = F)
+}
 end_time <- Sys.time()
 end_time - start_time ##Time difference of 1.734443 hours
 
-## import dataset and take a look
+## import dataset and take a look; THIS DATA IS FED INTO THE TARGETS PIPELINE
 # co <- read_ebd("./raw_data/ebd_can_obsdata.txt")
 # cs <- read_sampling("./raw_data/ebd_can_sampdata.txt")
-# glimpse(cs)
 
 ## 2.0 Filter ebird by urban area polygons in sf object ----
 cancities <- read_sf("./data/01-can_cities_5kmbuffer.shp")

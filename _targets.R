@@ -10,7 +10,7 @@ library(tarchetypes)
 tar_source("R/")
 
 # Set target-specific options such as packages that are required:
-tar_option_set(packages = c("tidyverse", "dplyr", "ggplot2", "ggpubr","viridis",
+tar_option_set(packages = c("tidyverse", "dplyr", "ggplot2", "ggpubr","viridis", "patchwork",
                             "rnaturalearth", "terra", "sf", "stars",
                             "auk", "vegan"))
 
@@ -32,10 +32,11 @@ list(
   tar_target(zf_bycity, auk_zerofill(data_bycity[[1]], collapse = T), pattern = map(data_bycity), iteration = "list"),
   tar_target(zf_checklists, zf_tidy(zf_bycity), pattern = map(zf_bycity), iteration = "list"),
   
+  tar_target(div_bycity, calc_diversity(zf_checklists), pattern = map(zf_checklists), iteration = "list"),
+  tar_target(allcities_divdf, setNames(div_bycity, nm = urb_popcentres$PCNAME.x)),
+  tar_target(allcities_zfdf, setNames(zf_checklists, nm = urb_popcentres$PCNAME.x)),
+  
   tar_target(table_cityebirdsums, city_summary_table(zf_checklists, urb_popcentres)),
   tar_target(plot_cityebirdsums, city_summary_plot(table_cityebirdsums)),
-  
-  tar_target(div_bycity, calc_diversity(zf_checklists), pattern = map(zf_checklists), iteration = "list"),
-  tar_target(plot_divbycity, biodiv_plot(div_bycity,
-                                         "Montréal", zoomlevel = 8, basemaplist = NA_basemaps, citylist = urb_popcentres))
+  tar_target(plot_divbycity, biodiv_plots(div_bycity, "Montréal", zoomlevel = 8, basemaplist = NA_basemaps, citylist = urb_popcentres))
 )

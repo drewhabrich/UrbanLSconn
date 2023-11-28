@@ -6,7 +6,7 @@
 ## Author: Andrew Habrich
 ##
 ## Date Created: 2023-10-30
-## Date last Modified: 2023-10-30
+## Date last Modified: 2023-11-23
 ##
 ## Email: 
 ## - andrhabr@gmail.com
@@ -101,14 +101,16 @@ city_summary_table <- function(zf_checklists, urb_popcentres) {
 }
 
 #### city summary plot
-city_summary_plot <- function(summary_table)
+city_summary_plot <- function(summary_table) {
 summary_table %>% distinct() %>% 
   mutate(Dataframe = fct_reorder(Dataframe, checklist_count)) %>% 
   # Sort the data by IDcount in descending order
   ggplot(aes(y = Dataframe, x = checklist_count)) +
     geom_bar(stat = "identity") +
+    ggtitle("Number of unique checklists by city in Canada") + 
     labs(y = "City", x = "Checklist count") +
-    theme_minimal()
+    theme_bw()
+}
 
 #### pivot wide and calculate species diversity estimates for each checklist
 calc_diversity <- function(checklist_dataframe) {
@@ -128,10 +130,10 @@ calc_diversity <- function(checklist_dataframe) {
   div <- zf_div %>% left_join(zf %>% distinct(checklist_id, .keep_all = TRUE) %>%
                                        select(checklist_id, latitude, longitude), by = "checklist_id") %>% 
                      relocate(c("shannondiv","specrich","evenness","latitude","longitude"), .after = checklist_id)
-}
+  }
 
-#### plot diversity
-biodiv_plot <- function (div_datlist, zoomtocity, zoomlevel, basemaplist, citylist) {
+#### plot diversity 
+biodiv_plots <- function(div_datlist, zoomtocity, zoomlevel, basemaplist, citylist) {
   names(div_datlist) <- citylist$PCNAME.x
   city <- citylist %>% filter(PCNAME.x == zoomtocity) %>% st_geometry() %>% st_centroid()
   lon_span <- 360 / 2^zoomlevel
@@ -139,35 +141,33 @@ biodiv_plot <- function (div_datlist, zoomtocity, zoomlevel, basemaplist, cityli
   lon_bounds <- c(st_coordinates(city)[1] - lon_span / 2, st_coordinates(city)[1] + lon_span / 2)
   lat_bounds <- c(st_coordinates(city)[2] - lat_span / 2, st_coordinates(city)[2] + lat_span / 2)
   coi <- div_datlist[[zoomtocity]]
-coi %>% st_as_sf(coords = c("longitude", "latitude"), crs=4326) %>% 
-  ggplot() +
+  coi_sf <- coi %>% st_as_sf(coords = c("longitude", "latitude"), crs=4326)
+  specr <- coi_sf %>% ggplot() +
     geom_sf(data = basemaplist$ne_land) +
     geom_sf(data = basemaplist$ne_state_lines) +
     geom_sf(data = basemaplist$ne_country_lines) +
     geom_sf(data = citylist %>% filter(PCNAME.x == zoomtocity), fill= "pink") +
     geom_sf(mapping = aes(colour = specrich)) + viridis::scale_color_viridis(alpha=0.75, begin = 0.2, end = 1) +
-    ggtitle(zoomtocity) +
+    ggtitle("Species richness") +
     coord_sf(xlim = lon_bounds, ylim = lat_bounds, expand = FALSE, default_crs = sf::st_crs(4326)) +
-    theme_bw()
+    theme_bw() + theme(legend.position="bottom", legend.title = element_blank())
+  shdiv <- coi_sf %>% ggplot() +
+    geom_sf(data = basemaplist$ne_land) +
+    geom_sf(data = basemaplist$ne_state_lines) +
+    geom_sf(data = basemaplist$ne_country_lines) +
+    geom_sf(data = citylist %>% filter(PCNAME.x == zoomtocity), fill= "pink") +
+    geom_sf(mapping = aes(colour = shannondiv)) + viridis::scale_color_viridis(alpha=0.75, begin = 0.2, end = 1) +
+    ggtitle("Shannon diversity") +
+    coord_sf(xlim = lon_bounds, ylim = lat_bounds, expand = FALSE, default_crs = sf::st_crs(4326)) +
+    theme_bw() + theme(legend.position="bottom", legend.title = element_blank())
+  even <- coi_sf %>% ggplot() +
+    geom_sf(data = basemaplist$ne_land) +
+    geom_sf(data = basemaplist$ne_state_lines) +
+    geom_sf(data = basemaplist$ne_country_lines) +
+    geom_sf(data = citylist %>% filter(PCNAME.x == zoomtocity), fill= "pink") +
+    geom_sf(mapping = aes(colour = evenness)) + viridis::scale_color_viridis(alpha=0.75, begin = 0.2, end = 1) +
+    ggtitle("Evenness") +
+    coord_sf(xlim = lon_bounds, ylim = lat_bounds, expand = FALSE, default_crs = sf::st_crs(4326)) +
+    theme_bw() + theme(legend.position="bottom", legend.title = element_blank())
+  specr + shdiv + even + plot_annotation(title = zoomtocity)
 }
-# 
-# biodiv_plot <- function (div_datlist, div_metric, zoomtocity, zoomlevel, basemaplist, citylist) {
-#   names(div_datlist) <- citylist$PCNAME.x
-#   cityofinterest <- div_datlist$"zoomtocity" %>% as_tibble(.name_repair = "minimal")
-#   city <- citylist %>% filter(PCNAME.x == zoomtocity) %>% st_geometry() %>% st_centroid()
-#   lon_span <- 360 / 2^zoomlevel
-#   lat_span <- 180 / 2^zoomlevel
-#   lon_bounds <- c(st_coordinates(city)[1] - lon_span / 2, st_coordinates(city)[1] + lon_span / 2)
-#   lat_bounds <- c(st_coordinates(city)[2] - lat_span / 2, st_coordinates(city)[2] + lat_span / 2)
-#   coi_sf <- cityofinterest %>% st_as_sf(coords = c("longitude", "latitude"), crs=4326)
-#   coi_sf %>% 
-#     ggplot() + 
-#     geom_sf(data = NA_basemaps$ne_land) + 
-#     geom_sf(data = NA_basemaps$ne_state_lines) + 
-#     geom_sf(data = NA_basemaps$ne_country_lines) + 
-#     geom_sf(data = citylist %>% filter(PCNAME.x == zoomtocity), fill= "pink") +
-#     geom_sf(aes(col = div_metric)) + viridis::scale_color_viridis(alpha=0.75, begin = 0.2, end = 1) +
-#     ggtitle(zoomtocity) +
-#     coord_sf(xlim = lon_bounds, ylim = lat_bounds, expand = FALSE) +
-#     theme_bw()
-# }
