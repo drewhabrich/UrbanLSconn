@@ -1,5 +1,6 @@
 library(targets)
 library(tarchetypes)
+library(geotargets)
 
 #run tar_make() to run the pipeline
 #run tar_manifest() to see the steps in the pipeline
@@ -10,33 +11,87 @@ library(tarchetypes)
 tar_source("R/")
 
 # Set target-specific options such as packages that are required:
-tar_option_set(packages = c("tidyverse", "dplyr", "ggplot2", "ggpubr","viridis", "patchwork",
-                            "rnaturalearth", "terra", "sf", "stars",
-                            "auk", "vegan"))
+tar_option_set(packages = c("tidyverse", "ggpubr", "RColorBrewer","qs", 
+                            "ggspatial", "sf", "terra", "tidyterra", "rnaturalearth", "mapview",
+                            "auk", "vegan", "landscapemetrics", "exactextractr",
+                            "targets", "tarchetypes", "geotargets"),
+               format = "qs",
+               resources = tar_resources(qs = tar_resources_qs(preset = "high"))
+)
 
-# List of target objects and the functions to apply to each of them; NOTE this does not RUN the pipeline, only defines it.
+# List of target objects and the functions to apply to each of them; 
+# NOTE this does not RUN the pipeline, only defines it.
 list(
-  tar_target(NA_basemaps, get_naturalearth("ne_basemaps", "North America", "CAN", c("USA", "CAN"))), 
-  tar_target(urb_popcentres, get_populationcentres("lpc_000b21a_e.shp", "POPCTR.csv", "EPSG:4326", 100000)),
-  tar_target(urb_buffers, st_buffer(urb_popcentres, dist = 5000)), #5km buffer around each urban area
-
-  tar_target(plot_cityarea, plot_urbanarea("Montréal", zoomlevel = 5, basemaplist = NA_basemaps, citylist = urb_popcentres)),
-  tar_target(plot_buffarea, plot_urbanarea("Montréal", zoomlevel = 5, basemaplist = NA_basemaps, citylist = urb_buffers)),
+  ####read in spatial data
+  tar_terra_vect(urbanareas, get_urbanareas(country = "Canada", 
+                                            minpopsize = 100000, 
+                                            buffersize = 1000)), 
+  tar_terra_rast(urban_esarasters, get_urbanESA_grids(urban_polygons = urbanareas, 
+                                                      esa_datadir = "F:/DATA/ESA2021LANDCOVER/"),
+                 format = "rds"),
+  tar_target(urban_ESA_LC, get_urbanESA_LC(rasterlist = urban_esarasters,
+                                           outputdir = "/output/ESArasters/",
+                                           urban_polygons = urbanareas),
+                 format = "rds"),
+  tar_target(ghsl_builtLC, get_builtLCvolume(datadir = "/raw_data/ghsl/",
+                                             outputdir = "/output/GHSL_builtV/",
+                                             urban_polygons = urbanareas),
+                 format = "rds"),
   
+  ####read in the ebird data
   tar_target(ebd_can, auk_ebd(file = "./raw_data/ebd_can_obsdata.txt", #this is the .txt with the data
-                              file_sampling = "./raw_data/ebd_can_sampdata.txt")),
-  tar_target(ebird_citylist, ebird_by_city(urb_buffers)), #create and check list of cities with ebird data
-  tar_target(ebird_cityfilters, generate_city_filters(ebird_citylist, ebd_can)), #create ebird filters for cities
-  tar_target(data_bycity, ebird_data_bycity(ebird_cityfilters, ebird_citylist)),
+                              file_sampling = "./raw_data/ebd_can_sampdata.txt"),
+             cue = tar_cue("never")),
+  ####create and check list of cities with ebird data
+  tar_target(ebird_citydatalist, checkdata_by_city(urbanareas),
+             cue = tar_cue("always")), 
+    # generate ebird filters per city
+  tar_target(ebird_citydata, ebirdfilter_by_city(urban_polygons = urbanareas, 
+                                                 ebd_data = ebd_can,
+                                                 ebirdcity_out = ebird_citydatalist),
+             cue = tar_cue("never")),
+  #create and save RDS file of ebird obs/sampl data
+  tar_target(ebird_RDS, write_cityRDS(citylist = ebird_citydatalist, 
+                                      ebird_cityfilters = ebird_citydata), 
+             pattern = map(ebird_citydatalist), iteration = "vector",
+             cue = tar_cue("never")),
+  #filter ebird data by city polygon
+  tar_target(ebird_filteredbycity, spatial_filter(citylist = ebird_citydatalist, 
+                                          ebirddat_RDS = ebird_RDS),
+             cue = tar_cue("never")),
   
-  tar_target(zf_bycity, auk_zerofill(data_bycity[[1]], collapse = T), pattern = map(data_bycity), iteration = "list"),
-  tar_target(zf_checklists, zf_tidy(zf_bycity), pattern = map(zf_bycity), iteration = "list"),
+  #zerofill the data to get presence/absence
+  tar_target(zf_citydata, zerofill_citylist(ebird_filtdata = ebird_filteredbycity), 
+             pattern = map(ebird_filteredbycity), iteration = "vector"),
+  #create a tidy data frame
+  tar_target(city_tidyzfdf, zf_tidy(zf_citydata), 
+             pattern = map(zf_citydata), iteration = "vector"),
+  #### create a summary table for all the cities combined 
+  tar_target(city_ebirdsums, city_summary_table(city_tidyzfdf), 
+             pattern = map(city_tidyzfdf), iteration = "vector"),
+  #calculate biodiversity indices for every checklist, per city
+  tar_target(div_bycity, calc_biodiversity(city_tidyzfdf), pattern = map(city_tidyzfdf), iteration = "vector"),
   
-  tar_target(div_bycity, calc_diversity(zf_checklists), pattern = map(zf_checklists), iteration = "list"),
-  tar_target(allcities_divdf, setNames(div_bycity, nm = urb_popcentres$PCNAME.x)),
-  tar_target(allcities_zfdf, setNames(zf_checklists, nm = urb_popcentres$PCNAME.x)),
+  #calculate landscape metrics for each checklist, per city
+  tar_target(lsm_bycity750, calc_landscape_metric(citydiv = div_bycity,
+                                               rasterlist = urban_ESA_LC,
+                                               bufferradius = 750, #1.5km diameter buffer
+                                               crs = "EPSG:3978"), #Canada Atlas Lambert
+             pattern = map(div_bycity), iteration = "vector"),
+  tar_target(lsm_bycity1500, calc_landscape_metric(citydiv = div_bycity,
+                                               rasterlist = urban_ESA_LC,
+                                               bufferradius = 1500, #3km diameter buffer
+                                               crs = "EPSG:3978"), #Canada Atlas Lambert
+             pattern = map(div_bycity), iteration = "vector"),
+  tar_target(lsm_bycity2500, calc_landscape_metric(citydiv = div_bycity,
+                                               rasterlist = urban_ESA_LC,
+                                               bufferradius = 2500, #3km diameter buffer
+                                               crs = "EPSG:3978"), #Canada Atlas Lambert
+             pattern = map(div_bycity), iteration = "vector"),
   
-  tar_target(table_cityebirdsums, city_summary_table(zf_checklists, urb_popcentres)),
-  tar_target(plot_cityebirdsums, city_summary_plot(table_cityebirdsums)),
-  tar_target(plot_divbycity, biodiv_plots(div_bycity, "Montréal", zoomlevel = 8, basemaplist = NA_basemaps, citylist = urb_popcentres))
+  #extract the raster values in a buffer around each checklist in a city
+  tar_target(builtv_bycity, extract_raster_inpolygon(chkldata = div_bycity,
+                                                     rasterlist = ghsl_builtLC,
+                                                     bufferradius = 1500),
+             pattern = map(div_bycity), iteration = "vector")
 )
