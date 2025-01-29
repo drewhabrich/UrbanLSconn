@@ -97,23 +97,3 @@ mapview(ghs_fua_db, layer.name = "UrbanCentre Area(km2)",
         zcol = "AREA", 
         col.regions = viridisLite::viridis(7), 
         label = "UC_NM_MN")
-
-## 5. Identify ESA cells that overlap with urban centres ----
-fuacan <- read_sf("./data/00-ghs_fua_canada.gpkg", layer = "ghs_fua")
-esagrid <- read_sf("./raw_data/esa_worldcover_grid_composites.fgb")
-
-# identify the cells that overlap with the urban centres
-esagrid_fua <- st_intersects(esagrid, fuacan, sparse = F) %>% 
-  #extract all elements that are not 0
-  apply(., 1, any) %>% 
-  #coerce to dataframe and rename the . column to overlap
-  as_tibble() %>%
-  rename(overlap = value) %>%
-  #add the tile name to the dataframe
-  mutate(tile = esagrid$tile) %>%
-  #filter to only the cells that overlap
-  filter(overlap == T)
-  
-# filter the esagrid to cells that match tile name in esagrid_fua and plot with mapview
-mapview(fuacan, label = "eFUA_name", layer.name = "Urban centre") + 
-  mapview(esagrid %>% filter(tile %in% esagrid_fua$tile), label = "tile", layer.name = "ESA tiles") 

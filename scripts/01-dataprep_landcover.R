@@ -16,15 +16,18 @@
 
 ## 1. Load relevant packages--------
 #install.packages("pacman")
-pacman::p_load(tidyverse, ggpubr, RColorBrewer, 
-               ggspatial, sf, terra, rnaturalearth, mapview,
+pacman::p_load(tidyverse, ggpubr, RColorBrewer, tictoc,
+               ggspatial, sf, terra, tidyterra, rnaturalearth, mapview,
                targets, tarchetypes)
-terraOptions(progress = 10, verbose = TRUE)
+terraOptions(progress = 10, verbose = F, memfrac = 0.8)
+
+## Import the urban centres ----
+fuacan <- read_sf("./data/00-ghs_fua_canada.gpkg", layer = "ghs_fua")
+fua_vect <- vect(fuacan)
+
 ## 2. landcover data from Copernicus, European space agency ----
 # Source: ESA WorldCover 10 m 2021 v200, downloadable here: https://zenodo.org/records/7254221
-
 ### 2.1. Identify ESA cells that overlap with urban centres ----
-fuacan <- read_sf("./data/00-ghs_fua_canada.gpkg", layer = "ghs_fua")
 esagrid <- read_sf("./raw_data/esa_worldcover_grid_composites.fgb")
 
 # identify the cells that overlap with the urban centres
@@ -70,36 +73,152 @@ esa_rasters <- esa_tilelist %>%
   pull(landcover) %>% 
   sprc()
 
-summary(esa_rasters)
-# master <- terra::merge(esa_rasters, 
-#                        filename = paste0(datadir, "esa_master_lc.tif"),
-#                        overwrite = FALSE)
+### 4.0 Landsat annual EVI composite ------------------------------------------
+outputdir <- "./output/landsat_evi/" #create the output folder if it doesnt exist
+if(!dir.exists(outputdir)){
+  dir.create(outputdir)
+}
 
-## for each of the cities in the fuacan, crop the landcover rastercollection so that each city has its own raster
-TO <- vect(fuacan %>% filter(eFUA_name == "Toronto"))
-MTL <- vect(fuacan %>% filter(eFUA_name == "Montreal"))
+# Source: USGS Landsat 8 EVI annual composite, downloaded from Google Earth Engine
+evi_rasters <- list.files("./raw_data/landsat_evi/", full.names = T) %>%
+  as_tibble() %>% rename(path = value) %>%
+  filter(str_detect(path, "tif$")) %>%
+  mutate(filename = basename(path)) %>%
+  mutate(ID = paste0("EVI_", str_extract(filename, "\\d{4}"))) %>%
+  mutate(raster = map(path, ~ rast(.x)))
 
-plot(esa_rasters[4])
-plot(TO, add = T)
-TOLC <- mask(esa_rasters[4], TO)
-plot(TOLC)
+# create a vector of years to assess
+years <- evi_rasters %>% pull(ID) %>% str_extract("\\d{4}") %>% unique()
+## create a virtual raster dataset for each year of the the EVI data
+for (i in 1:length(years)) {
+  evi_year <- evi_rasters %>% filter(str_detect(ID, years[i]))
+  vrt(
+    x = evi_year$path,
+    filename = paste0("./output/landsat_evi/evi_", years[i], "_tiles.vrt"),
+    overwrite = T
+  )
+}
 
-###
-## load packages
-pacman::p_load(tidyverse, ggpubr, ggspatial, geodata, terra, sf, mapview, leaflet, stars)
+## Crop the raster to each of the urban centres for each of the years
+for (i in 1:length(years)) {
+  evi_year <- evi_rasters %>% filter(str_detect(ID, years[i]))
+  vrtfile <- paste0("./output/landsat_evi/evi_", years[i], "_tiles.vrt")
+  evi_year_raster <- rast(vrtfile)
+  for (j in 1:nrow(fuacan)) {
+    fua <- fuacan[j, ]
+    fua_name <- fua$eFUA_name
+    fua_vect <- vect(fua) %>% buffer(width = 5000)
+    evi_fua <- crop(evi_year_raster, fua_vect, filename = paste0(outputdir, fua_name, "_EVI_", years[i], ".tif"),
+                    overwrite = T)
+  }
+}
 
-## check what datasets are available on geodata
-countries <- country_codes() #high resolution
+## Import a raster and test if it worked
+list.files("./output/landsat_evi/")
+Wpg_evi2012 <- rast("./output/landsat_evi/winnipeg_EVI_2012.tif")
+Wpg_evi2013 <- rast("./output/landsat_evi/winnipeg_EVI_2013.tif")
+Wpg_evi <- c(Wpg_evi2012, Wpg_evi2013)
+Wpg_vect <- vect(fuacan %>% filter(eFUA_name == "Winnipeg"))
+panel(Wpg_evi, layout = c(1, 2), zlim = c(0, 1), col = rev(terrain.colors(255)),
+      fun=\()lines(Wpg_vect), loc.main="topright")
 
-## get the country code for Canada
-can_adm <- gadm(country = "Canada", version = "latest", resolution = 2, path = "raw_data/") #low resolution
-plot(can_adm)
 
-## geodata, ESA landcover
-esalc <- geodata::landcover(var = "built", path = "raw_data/")
-plot(esalc)
+### 5.0 ECOSTRESS dataset: https://ecostress.jpl.nasa.gov/ ----
+#https://lpdaac.usgs.gov/data/get-started-data/collection-overview/missions/ecostress-overview/#ecostress-naming-conventions
+### L3_Meteorological
+dir_met <- "C:/Users/andrewhabrich/OneDrive - Carleton University/GIS storage/ecostress/ECO_L3T_MET"
+ecostress_files <- list.files(dir_met, full.names = T) %>%
+  as_tibble() %>% rename(path = value) %>% mutate(filename = basename(path)) %>% 
+  separate(filename, remove = F,
+    into = c("product", "level", "type", "orbitnum", "sceneid",
+             "tileid","acqdate","buildid","iterationnum","var"), sep = "_") %>%
+  separate(acqdate, into = c("date", "time"), sep = "T") %>% #convert the date column into year, month, day
+  mutate(
+    year = str_sub(date, 1, 4),
+    month = str_sub(date, 5, 6),
+    day = str_sub(date, 7, 8)) %>% 
+  mutate(raster = map(path, ~ rast(.x)))
 
-## Crop the landcover data to Canada polygon
-esalc_canada <- crop(esalc, can_adm)
-plot(esalc_canada)
+## get a dataframe for each variable of interest
+eco_ta <- ecostress_files %>% select(path, filename, tileid, year, time, sceneid, var) %>% filter(var == "Ta.tif")
+eco_rh <- ecostress_files %>% select(path, filename, tileid, year, time, sceneid, var) %>% filter(var == "RH.tif")
 
+## import the rasters into a spatrasterdatacollection, sprc() object
+outcrs <- crs(fua_vect)
+eco_ta_rasters <- sprc(eco_ta$path)
+## project the rasters to the same crs as the fua_vect
+eco_ta_rasters <- project(eco_ta_rasters, outcrs, method = "bilinear", threads = T, partial = T)
+
+## mosaic the rasters
+# mosaic(eco_ta_rasters, fun = "mean",
+#        filename = "C:/Users/andrewhabrich/OneDrive - Carleton University/GIS storage/ecostress/ecostress_airtemp_mosaicv2.tif",
+#        wopt = list(verbose = T, progress = 5, todisk = T, steps = 50))
+# ta <- rast("C:/Users/andrewhabrich/OneDrive - Carleton University/GIS storage/ecostress/ecostress_airtemp_mosaicv2.tif")
+
+# eco_rh_rasters <- sprc(eco_rh$path)
+# mosaic(eco_rh_rasters, fun = "mean",
+#        filename = "C:/Users/andrewhabrich/OneDrive - Carleton University/GIS storage/ecostress/ecostress_relhumid_mosaic.tif",
+#        verbose = F, progress = 10)
+
+### L2_LandSurfaceTemperature
+dir_lst <- "C:/Users/andrewhabrich/OneDrive - Carleton University/GIS storage/ecostress/ECO_L2T_LSTE"
+ecolst_files <- list.files(dir_lst, full.names = T) %>%
+  as_tibble() %>% rename(path = value) %>% mutate(filename = basename(path)) %>% 
+  separate(filename, remove = F,
+           into = c("product", "level", "type", "orbitnum", "sceneid",
+                    "tileid","acqdate","buildid","iterationnum","var"), sep = "_") %>%
+  separate(acqdate, into = c("date", "time"), sep = "T") %>% #convert the date column into year, month, day
+  mutate(
+    year = str_sub(date, 1, 4),
+    month = str_sub(date, 5, 6),
+    day = str_sub(date, 7, 8))
+
+# Test LST for some months
+lst <- ecolst_files
+lst_sprc <- sprc(lst$path)
+# mosaic(lst_sprc, fun = "mean", 
+#        filename = "C:/Users/andrewhabrich/OneDrive - Carleton University/GIS storage/ecostress/lst_mosaic.tif",
+#        verbose = F, progress = 10)
+
+# lst_vrt <- vrt(x = lst$path,
+#       filename = "C:/Users/andrewhabrich/OneDrive - Carleton University/GIS storage/ecostress/eco_lst2024_march.vrt",
+#       overwrite = T)
+
+# merge(lst_vrt, fun = "mean", 
+#        filename = "C:/Users/andrewhabrich/OneDrive - Carleton University/GIS storage/ecostress/lst_mosaic.tif",
+#        verbose = F, progress = 10)
+
+# # convert the fua_vect to the same crs as the vrt_03 using terra package
+# fua_v <- project(fua_vect, vrt, partial = T)
+# march <- rast("C:/Users/andrewhabrich/OneDrive - Carleton University/GIS storage/ecostress/eco_lst2024_march.vrt")
+
+# # Plot to test
+# plot(vrt)
+# plot(fua_v)
+# plot(fua_v, add = T)
+
+### 6.0 Yale UHI data ----
+# find all the files that are tif
+uhi_summer <- list.files("./raw_data/yceo_summeruhi/", full.names = T) %>% #convert to dataframe
+  as_tibble() %>% rename(path = value) %>%
+  #filter to just the tifs
+  filter(str_detect(path, "tif$")) %>%
+  #extract the filename
+  mutate(filename = basename(path)) %>%
+  #create an ID column of just UHI_ and the year number
+  mutate(ID = paste0("UHI_", (str_extract(filename, "\\d{4}")))) %>%
+  #filter to only the years that match the ebird data (2010-2022)
+  filter(str_detect(filename, "201[0-9]")) %>%
+  #import the rasters
+  mutate(raster = map(path, ~rast(.x))) 
+## save to a sprc object and name the layers
+uhi_sprc <- sprc(uhi_summer$raster)
+names(uhi_sprc) <- uhi_summer$ID
+
+## Plot the first layer
+uhi2010 <- uhi_sprc[1]
+## crop to the urban centres
+uhi2010_fua <- crop(uhi2010, fuacan)
+# plot the daytime temperature
+plot(fuacan$geom[1])
+plot(crop(uhi2010_fua$Daytime, fuacan$geom[1]), add = T)

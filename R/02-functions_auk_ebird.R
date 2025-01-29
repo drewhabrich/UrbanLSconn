@@ -18,7 +18,7 @@
 #### check for data of extracted list of cities
 checkdata_by_city <- function (urbanarea_vector) {
   urbarea_sf <- urbanarea_vector %>% st_as_sf()
-  ebirdcity_out <- urbarea_sf %>% select(eFUA_name, geometry) %>% 
+  ebirdcity_out <- urbarea_sf %>% dplyr::select(eFUA_name, geometry) %>% 
     mutate(cityname = eFUA_name,
            checklist = str_c("./raw_data/ebd2022_", eFUA_name, "_fua.txt"),
            sampling = str_c("./raw_data/ebdsamp2022_", eFUA_name, "_fua.txt")) %>% 
@@ -29,7 +29,7 @@ checkdata_by_city <- function (urbanarea_vector) {
     #check for the existence of the RDS files
     mutate(chklRDS_exists = file.exists(chklRDS),
            smplRDS_exists = file.exists(smplRDS)) %>% 
-    select(-eFUA_name)
+    dplyr::select(-eFUA_name)
 }
 
 #### generate ebird filters per city based on urban area bounding box      
@@ -175,19 +175,6 @@ zf_tidy <- function(zf_bycity_dataframes){
   files_zfdf <- tibble(cityname = zf_bycity_dataframes$cityname, 
                        rds_tidyzf = str_c(output_dir, zf_bycity_dataframes$cityname, "_tidyzf.rds"))
   return(files_zfdf)
-}
-
-#### summarize counts
-city_summary_table <- function(tidy_zfdf) {
-  ## read in the data
-  df <- readRDS(tidy_zfdf$rds_tidyzf[1]) 
-  ## remove rows where species observed is FALSE
-  df <- df %>% filter(species_observed == TRUE)
-  ## create a new dataframe to output data
-  citysummary <- tibble(cityname = tidy_zfdf$cityname[1], 
-         n_chkl = n_distinct(df$checklist_id),
-         n_spp = n_distinct(df$scientific_name))
-  return(citysummary)
 }
 
 #### calculate species diversity estimates for each checklist
