@@ -1,0 +1,33 @@
+cityname,rds_div,LCpath,BVpath,n_chkl,n_spp
+Victoria,./output/ebird_data/rds_div_bycity/Victoria_div.rds,./output/ESArasters_factor/Victoria.tif,./output/GHSL_builtV/Victoria_builtV.tif,16584,277
+Nanaimo,./output/ebird_data/rds_div_bycity/Nanaimo_div.rds,./output/ESArasters_factor/Nanaimo.tif,./output/GHSL_builtV/Nanaimo_builtV.tif,5855,220
+Vancouver,./output/ebird_data/rds_div_bycity/Vancouver_div.rds,./output/ESArasters_factor/Vancouver.tif,./output/GHSL_builtV/Vancouver_builtV.tif,38653,302
+Abbotsford,./output/ebird_data/rds_div_bycity/Abbotsford_div.rds,./output/ESArasters_factor/Abbotsford.tif,./output/GHSL_builtV/Abbotsford_builtV.tif,3059,195
+Lethbridge,./output/ebird_data/rds_div_bycity/Lethbridge_div.rds,./output/ESArasters_factor/Lethbridge.tif,./output/GHSL_builtV/Lethbridge_builtV.tif,2451,218
+Calgary,./output/ebird_data/rds_div_bycity/Calgary_div.rds,./output/ESArasters_factor/Calgary.tif,./output/GHSL_builtV/Calgary_builtV.tif,31581,296
+Red Deer,./output/ebird_data/rds_div_bycity/Red Deer_div.rds,./output/ESArasters_factor/Red Deer.tif,./output/GHSL_builtV/Red Deer_builtV.tif,1046,193
+Edmonton,./output/ebird_data/rds_div_bycity/Edmonton_div.rds,./output/ESArasters_factor/Edmonton.tif,./output/GHSL_builtV/Edmonton_builtV.tif,11948,251
+Regina,./output/ebird_data/rds_div_bycity/Regina_div.rds,./output/ESArasters_factor/Regina.tif,./output/GHSL_builtV/Regina_builtV.tif,4132,247
+Saskatoon,./output/ebird_data/rds_div_bycity/Saskatoon_div.rds,./output/ESArasters_factor/Saskatoon.tif,./output/GHSL_builtV/Saskatoon_builtV.tif,2877,246
+Winnipeg,./output/ebird_data/rds_div_bycity/Winnipeg_div.rds,./output/ESArasters_factor/Winnipeg.tif,./output/GHSL_builtV/Winnipeg_builtV.tif,10741,265
+Thunder Bay,./output/ebird_data/rds_div_bycity/Thunder Bay_div.rds,./output/ESArasters_factor/Thunder Bay.tif,./output/GHSL_builtV/Thunder Bay_builtV.tif,1124,198
+Detroit,./output/ebird_data/rds_div_bycity/Detroit_div.rds,./output/ESArasters_factor/Detroit.tif,./output/GHSL_builtV/Detroit_builtV.tif,5241,259
+London,./output/ebird_data/rds_div_bycity/London_div.rds,./output/ESArasters_factor/London.tif,./output/GHSL_builtV/London_builtV.tif,11071,263
+Kitchener,./output/ebird_data/rds_div_bycity/Kitchener_div.rds,./output/ESArasters_factor/Kitchener.tif,./output/GHSL_builtV/Kitchener_builtV.tif,13308,260
+Brantford,./output/ebird_data/rds_div_bycity/Brantford_div.rds,./output/ESArasters_factor/Brantford.tif,./output/GHSL_builtV/Brantford_builtV.tif,2101,226
+Guelph,./output/ebird_data/rds_div_bycity/Guelph_div.rds,./output/ESArasters_factor/Guelph.tif,./output/GHSL_builtV/Guelph_builtV.tif,9092,235
+Toronto,./output/ebird_data/rds_div_bycity/Toronto_div.rds,./output/ESArasters_factor/Toronto.tif,./output/GHSL_builtV/Toronto_builtV.tif,77244,331
+St. Catharines,./output/ebird_data/rds_div_bycity/St. Catharines_div.rds,./output/ESArasters_factor/St. Catharines.tif,./output/GHSL_builtV/St. Catharines_builtV.tif,4720,262
+Barrie,./output/ebird_data/rds_div_bycity/Barrie_div.rds,./output/ESArasters_factor/Barrie.tif,./output/GHSL_builtV/Barrie_builtV.tif,3933,239
+Peterborough,./output/ebird_data/rds_div_bycity/Peterborough_div.rds,./output/ESArasters_factor/Peterborough.tif,./output/GHSL_builtV/Peterborough_builtV.tif,7774,231
+Kingston,./output/ebird_data/rds_div_bycity/Kingston_div.rds,./output/ESArasters_factor/Kingston.tif,./output/GHSL_builtV/Kingston_builtV.tif,4961,241
+Ottawa,./output/ebird_data/rds_div_bycity/Ottawa_div.rds,./output/ESArasters_factor/Ottawa.tif,./output/GHSL_builtV/Ottawa_builtV.tif,42697,291
+Montreal,./output/ebird_data/rds_div_bycity/Montreal_div.rds,./output/ESArasters_factor/Montreal.tif,./output/GHSL_builtV/Montreal_builtV.tif,65100,308
+Saint-Jérôme,./output/ebird_data/rds_div_bycity/Saint-Jérôme_div.rds,./output/ESArasters_factor/Saint-Jérôme.tif,./output/GHSL_builtV/Saint-Jérôme_builtV.tif,2908,205
+Saint-Jean-sur-Richelieu,./output/ebird_data/rds_div_bycity/Saint-Jean-sur-Richelieu_div.rds,./output/ESArasters_factor/Saint-Jean-sur-Richelieu.tif,./output/GHSL_builtV/Saint-Jean-sur-Richelieu_builtV.tif,3569,243
+Sherbrooke,./output/ebird_data/rds_div_bycity/Sherbrooke_div.rds,./output/ESArasters_factor/Sherbrooke.tif,./output/GHSL_builtV/Sherbrooke_builtV.tif,4929,206
+Trois-Rivières,./output/ebird_data/rds_div_bycity/Trois-Rivières_div.rds,./output/ESArasters_factor/Trois-Rivières.tif,./output/GHSL_builtV/Trois-Rivières_builtV.tif,4038,247
+Quebec,./output/ebird_data/rds_div_bycity/Quebec_div.rds,./output/ESArasters_factor/Quebec.tif,./output/GHSL_builtV/Quebec_builtV.tif,28243,275
+Moncton,./output/ebird_data/rds_div_bycity/Moncton_div.rds,./output/ESArasters_factor/Moncton.tif,./output/GHSL_builtV/Moncton_builtV.tif,985,197
+Halifax,./output/ebird_data/rds_div_bycity/Halifax_div.rds,./output/ESArasters_factor/Halifax.tif,./output/GHSL_builtV/Halifax_builtV.tif,7794,260
+St. John's,./output/ebird_data/rds_div_bycity/St. John's_div.rds,./output/ESArasters_factor/St. John's.tif,./output/GHSL_builtV/St. John's_builtV.tif,4249,197

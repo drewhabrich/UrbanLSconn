@@ -18,7 +18,7 @@
 #### Function to identify urban centres from the GHSL functional urban areas
 get_urbanareas <- function (country, minpopsize, buffersize) {
   # read in the GHSL functional urban areas
-  ghsl_fua <- vect("./raw_data/GHS_FUA_UCDB2015_GLOBE_R2019A_54009_1K_V1_0/GHS_FUA_UCDB2015_GLOBE_R2019A_54009_1K_V1_0.gpkg") %>% 
+  ghsl_fua <- vect("./data/GHS_FUA_UCDB2015_GLOBE_R2019A_54009_1K_V1_0/GHS_FUA_UCDB2015_GLOBE_R2019A_54009_1K_V1_0.gpkg") %>% 
     project(y = "EPSG:4326") %>% #convert to lat/long
     makeValid() #make sure the polygons are valid (no self-intersections or unconnected polylines))
   fua <- ghsl_fua %>% filter(Cntry_name == country, FUA_p_2015 > minpopsize)
@@ -135,6 +135,9 @@ calc_urbandistance <- function(citychkls, urban_polygons, outputdir) {
     return(raster_df)
 }
 
+
+
+#### Function to extract building volumes for the buffered checklists####
 #### Function to get building heights and footprints raster layers
 get_builtLCvolume <- function(datadir, outputdir, urban_polygons, targetcrs) {
   # import the raster layer
@@ -154,10 +157,10 @@ get_builtLCvolume <- function(datadir, outputdir, urban_polygons, targetcrs) {
     #check if the file already exists, if it does skip this step
     if(!file.exists(paste0(ghsl_city_output, cityname, "_builtV.tif"))){
       crop(ghsl_bh, citypoly, mask = T) %>% 
-      project(y = targetcrs, method = "bilinear", threads = TRUE,
+        project(y = targetcrs, method = "bilinear", threads = TRUE,
                 filename = paste0(ghsl_city_output, cityname, "_builtV.tif"), 
                 overwrite = TRUE)
-      }
+    }
   }
   
   filenames <- list.files(ghsl_city_output, full.names = F)
@@ -177,100 +180,50 @@ get_builtLCvolume <- function(datadir, outputdir, urban_polygons, targetcrs) {
   return(raster_df)
 }
 
-#### Function to calculate the proportion of each landcover class in each buffer
-calc_landscape_metric <- function (citydiv, rasterlist, bufferradius, crs) {
-  output_dir <- "./output/ebird_data/lsm_div_bycity/"
-  ## add an if statement to check if the output file already exists
-  if(!file.exists(paste0("./output/ebird_data/lsm_div_bycity/", citydiv$cityname[1], bufferradius, "_lsm_div.rds"))){
-  ## import data
-  city_smpl <- readRDS(paste0("./output/ebird_data/rds_citydata/smpl_", citydiv$cityname[1], ".rds"))
-  city <- readRDS(citydiv$rds_div[1])
-  ## Remove the zero filled data, keep only the first 7 columns
-  city <- city[,1:7]
-  ## Join the sampling data to the diversity estimates using the checklist_id
-  city_data <- left_join(city, city_smpl, by = c("checklist_id", "latitude", "longitude"), keep = FALSE) %>% 
-    #remove useless columns
-    select(-c("last_edited_date", "country", "country_code", "state", "state_code", "county", "county_code", 
-              "iba_code", "usfws_code", "atlas_block", "locality", "locality_id", "locality_type")) %>% 
-    #create a year, month, and ordinal day column
-    mutate(year = as.numeric(format(observation_date, "%Y")), 
-           month = as.numeric(format(observation_date, "%m")), 
-           ordinal_day = as.numeric(format(observation_date, "%j")))
-  ## convert data to spatvector
-  city_vect <- vect(city_data, geom=c("longitude", "latitude"), crs = "EPSG:4326", keepgeom=TRUE)
-  ## generate circular buffers around each checklist location
-  city_buffers <- buffer(city_vect, width = bufferradius)
-  
-  ## import the landcover raster
-  rasterlist <- rasterlist %>% mutate(filepath = paste0(getwd(), rasterlist$datadir, rasterlist$file))
-  raster <- rast(rasterlist %>% 
-                 filter(str_detect(filepath, citydiv$cityname[1])) %>% 
-                 pull(filepath))
-  
-  ## crop the raster to the city area
-  city_lc <- crop(raster, city_vect, mask = T)
-  
-  ## project the city vector and raster to the same crs (a meter based reference system for lsm)
-  city_buffers <- project(city_buffers, y = crs)
-  city_lc <- project(city_lc, y = crs, method = "near") #need to include nearest neighbour method to keep categories
-  
-  ## calculate selected landscapemetrics in each buffer using landscapemetrics package
-  lsm <- NULL
-  for (i in seq_len(nrow(city_buffers))) {
-    buffer_i <- city_buffers[i, ]
-    
-    # crop and mask landcover raster so all values outside buffer are missing
-    lsm[[i]] <- crop(city_lc, buffer_i, mask = T) %>% 
-      # calculate landscape metrics
-      calculate_lsm(level = "class", metric = c("pland")) %>% 
-      # add variables to uniquely identify each point
-      mutate(checklist_id = buffer_i$checklist_id) %>% 
-      select(checklist_id, class, metric, value)
-  }
-  lsm <- bind_rows(lsm)
-  ### replace class values with the landcover class names
-  lcclass_lookup <- tibble(class = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100), 
-                           class_name = c("treecover", "shrubland", "grassland", "cropland", 
-                                          "builtup", "bare", "snow", "water", "wetland", 
-                                          "mangrove", "mosslichen"))
-  
-  ### convert to wide format and clean the data
-  lsm_wide <- lsm %>% 
-    #fill any missing classes with zeros
-    complete(class, nesting(checklist_id), fill = list(value = 0)) %>%
-    #class names
-    inner_join(select(lcclass_lookup, class, class_name), by = "class") %>%  
-    #transform to wide format
-    pivot_wider(values_from = value, 
-                names_from = c(class, class_name, metric), 
-                names_glue = "{metric}_c{str_pad(class, 2, pad = '0')}_{class_name}",
-                names_sort = T) %>%
-    arrange(checklist_id)
-  
-  #save to RDS
-  #if folder does not exist, create it
-  if(!dir.exists(output_dir)){
+##extract the building volume for each buffered checklist
+extract_bv_bychkl <- function (data, bufferradius, outputdir) {
+  #create output directory if it doesnt exist
+  output_dir <- outputdir
+  if (!dir.exists(output_dir)){
     dir.create(output_dir)
-    }
-  saveRDS(lsm_wide, paste0(output_dir, citydiv$cityname[1], bufferradius, "_lsm_div.rds"))
   }
+  ## get the specific city input
+  city <- data[1,]
+  CN <- city$cityname
   
+  if(!file.exists(paste0(output_dir, CN, bufferradius, "_builtv_chkl.rds"))){
+    city_rast <- rast(city$LCpath)
+    city_div <- readRDS(city$rds_div) %>% select(1:7)
+    city_div <- vect(city_div, geom = c("longitude", "latitude"), crs = "EPSG:4326") %>% 
+      project(y = city_rast)
+    city_div_buff <- buffer(city_div, width = bufferradius)
+    ## get the area of the buffer
+    polyarea <- expanse(city_div_buff, unit = "m")
+    
+    ## vector needs to be sf for exact_extract
+    city_sfbuff <- st_as_sf(city_div_buff)
+    city_sfbuff$polyarea <- polyarea
+    ### extract the volume of built up area in each buffer
+    city_extractedvalues <- exact_extract(city_rast, city_sfbuff, fun = c("mean","stdev","sum"),
+                                          append_cols = c("checklist_id", "polyarea"))
+    #save to csv
+    write.csv(city_extractedvalues, paste0(output_dir, CN, bufferradius, "_builtv_chkl.csv"))
+    #save to RDS
+    saveRDS(city_extractedvalues, paste0(output_dir, CN, bufferradius, "_builtv_chkl.rds"))
+  }
   ## return a dataframe of the file names and location of the RDSfile
-  files_lsmdiv_bycity <- tibble(cityname = citydiv$cityname, 
-                                rds_lsm = str_c(output_dir, citydiv$cityname, bufferradius, "_lsm_div.rds"))
-  return(files_lsmdiv_bycity)
+  builtv_bycity_df <- tibble(cityname = CN,
+                             rds_builtv = str_c(output_dir, CN, bufferradius, "_builtv_chkl.rds"))
+  return(builtv_bycity_df)
 }
 
 #### Function to calculate the proportion of each landcover class in each buffer####
 ## sample lsm from landscapemetrics
 calc_pland_metric <- function(cityname, citydata, landcover, 
-                              bufferradius, outputdir, targetcrs) {
-  #if folder does not exist, create it
-  if(!dir.exists(outputdir)){
-    dir.create(outputdir)
-  }
-  ## get the specific city input
-  if(!file.exists(paste0(outputdir, cityname, bufferradius, "_pland_div.csv"))){ ###IS IF STATEMENT RIGHT for FILENAME?
+                              bufferradius, targetcrs) {
+## get the specific city input
+  #un/comment if the result is already saved, to avoid rerunning the function
+  #if(!file.exists(paste0(outputdir, cityname, "_pland_results.csv"))){ 
     ## import checklist data & convert data to spatvector
     citychkldata <- citydata 
     city_vect <- vect(citychkldata, geom = c("longitude", "latitude"), crs = "EPSG:4326") %>% 
@@ -286,157 +239,62 @@ calc_pland_metric <- function(cityname, citydata, landcover,
                              what = "lsm_c_pland", 
                              directions = 8, neighbourhood = 8)
     
-    ### replace class values with the landcover class names
-    lcclass_lookup <- tibble(class = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100), 
-                             class_name = c("treecover", "shrubland", "grassland", "cropland", 
-                                            "builtup", "bare", "snow", "water", "wetland", 
-                                            "mangrove", "mosslichen"))
-    
-    ### convert to wide format and clean the data
-    chkl_pland %>% 
-      rename(checklist_id = plot_id) %>% 
-      #fill any missing classes with zeros
-      complete(class, nesting(checklist_id), fill = list(value = 0)) %>%
-      #class names
-      inner_join(select(lcclass_lookup, class, class_name), by = "class") %>%  
-      #transform to wide format
-      pivot_wider(values_from = value, 
-                  names_from = c(class, class_name, metric), 
-                  names_glue = "{metric}_c{str_pad(class, 2, pad = '0')}_{class_name}",
-                  names_sort = T) %>%
-      arrange(checklist_id)
-    }
+    ## tidy the dataframe for pivoting and merging
+    chkl_pland %>%
+      select(-c("layer", "level", "id", "percentage_inside")) %>%
+      #checklist ID for joining dataframes
+      rename(checklist_id = plot_id) %>%
+      mutate(buffer_radius = bufferradius)
+  #} #un/comment if the result is already saved, to avoid rerunning the function
 }
 
-## scale lsm from landscapemetrics
-# calc_scalesample <- function(cityname, citydata, landcover, 
-#                               bufferradius, outputdir, targetcrs) {
-#   #if folder does not exist, create it
-#   if(!dir.exists(outputdir)){
-#     dir.create(outputdir)
-#   }
-#   ## get the specific city input
-#   if(!file.exists(paste0(outputdir, cityname, "multiscale_pland.csv"))){
-#     ## import checklist data & convert data to spatvector
-#     citychkldata <- citydata 
-#     city_vect <- vect(citychkldata, geom = c("longitude", "latitude"), crs = "EPSG:4326") %>% 
-#       project(y = targetcrs)
-#    
-#     ## calculate selected landscapemetrics in each buffer using landscapemetrics package
-#     chkl_pland <- scale_sample(landscape = landcover, 
-#                              y = city_vect, 
-#                              #plot_id = city_vect$checklist_id, 
-#                              shape = "circle", size = bufferradius, 
-#                              what = "lsm_c_pland", 
-#                              directions = 8, neighbourhood = 8)
-#     
-    ### replace class values with the landcover class names
-    # lcclass_lookup <- tibble(class = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100), 
-    #                          class_name = c("treecover", "shrubland", "grassland", "cropland", 
-    #                                         "builtup", "bare", "snow", "water", "wetland", 
-    #                                         "mangrove", "mosslichen"))
-    
-    # ### convert to wide format and clean the data
-    # lsm_wide <- chkl_pland %>% 
-    #   rename(checklist_id = plot_id) %>% 
-    #   #fill any missing classes with zeros
-    #   complete(class, nesting(checklist_id), fill = list(value = 0)) %>%
-    #   #class names
-    #   inner_join(select(lcclass_lookup, class, class_name), by = "class") %>%  
-    #   #transform to wide format
-    #   pivot_wider(values_from = value, 
-    #               names_from = c(class, class_name, metric), 
-    #               names_glue = "{metric}_c{str_pad(class, 2, pad = '0')}_{class_name}",
-    #               names_sort = T) %>%
-    #   arrange(checklist_id)
-    
-    #save to file
-    #write_csv(chkl_pland, paste0(outputdir, cityname, "multiscale_pland.csv"), append = T)
-    #return(chkl_pland)
-  #}
-  #files_planddiv_bycity <- tibble(rds_pland = list.files(output_dir, pattern = "_pland_div.rds"))
-#}
+#### Convert to LSM to wide format and clean the data
+### replace class values with the landcover class 
+lsm_pivotwide <- function(lsm_results) {
+## replace class values with the landcover class names
+lcclass_lookup <- tibble(class = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100),
+                         class_name = c("treecover", "shrubland", "grassland", "cropland",
+                                        "builtup", "bare", "snow", "water", "wetland",
+                                        "mangrove", "mosslichen"))
 
-# write results to a CSV file
-# write_plandresults <- function(results, city_name, outputdir) {
-#   file_name <- paste0(outputdir, city_name, "_pland_results.csv")
-#   write_csv(results, file_name)
-#   ## check what files are in the output directory and save to a tibble and return the tibble
-#   plandfiles <- tibble(cityname = city_name, file = list.files(outputdir))
-#   return(plandfiles)
-# }
+## Convert to wide format and clean the data
+lsm_results %>% 
+  inner_join(lcclass_lookup, by = c("class" = "class")) %>% 
+  #replace NA values in the value column with 0
+  complete(class, nesting(checklist_id, buffer_radius), fill = list(value = 0)) %>%
+  pivot_wider(values_from = value,
+              names_from = c(metric, class, class_name, buffer_radius),
+              names_glue = "{metric}_{class_name}_{buffer_radius}m",
+              names_sort = TRUE) %>%
+  arrange(checklist_id)
+}
 
-#### Function to sample landscape metrics around sample points (checklists)####
+#### Function to sample aggregation metrics around sample points (checklists)####
 calc_aggrm_metric <- function(cityname, citydata, landcover, 
                              bufferradius, outputdir, targetcrs, what_metrics) {
   ## create the metric label
   agg_metrics <- what_metrics
   m_label <- agg_metrics %>% str_remove("lsm_l_") %>% paste(., collapse = "_")
   
-  ## define output directory
-  if(!dir.exists(outputdir)){
-    dir.create(outputdir)
-  }
-  
   ## get the specific city input
-  if(!file.exists(paste0(outputdir, cityname, bufferradius,"_", m_label, ".csv"))){
+  #if(!file.exists(paste0(outputdir, cityname, bufferradius,"_", m_label, ".csv"))){
     citychkldata <- citydata 
     city_vect <- vect(citychkldata, geom = c("longitude", "latitude"), crs = "EPSG:4326") %>% 
       project(y = targetcrs)
     ## generate circular buffers around each checklist location
     city_buffers <- buffer(city_vect, width = bufferradius)
     ## sample landscape metrics around chkl locations
-    city_aggrmetrics <- sample_lsm(landscape = landcover, y = city_buffers, 
-                                 plot_id = city_buffers$checklist_id, 
-                                 shape = "circle", size = bufferradius, all_classes = T, 
-                                 what = agg_metrics, 
-                                 directions = 8, neighbourhood = 8)
-  
-  ## convert to wide format
-  city_aggrmetrics %>% 
-    rename(checklist_id = plot_id) %>% 
-    pivot_wider(values_from = value, 
-                names_from = c(level, metric), 
-                names_glue = "{level}_{metric}",
-                names_sort = T) %>%
-    arrange(checklist_id)
-    }
-}
+    chkl_aggrmetrics <- sample_lsm(landscape = landcover, y = city_buffers, 
+                                   plot_id = city_buffers$checklist_id, 
+                                   shape = "circle", size = bufferradius, all_classes = T, 
+                                   what = agg_metrics, 
+                                   directions = 8, neighbourhood = 8)
+    ## tidy the dataframe for pivoting and merging
+    chkl_aggrmetrics %>%
+      #select(-c("layer", "level", "id", "percentage_inside")) %>%
+      #checklist ID for joining dataframes
+      rename(checklist_id = plot_id) %>%
+      mutate(buffer_radius = bufferradius)
 
-#### Function to extract building volumes for the buffered checklists####
-extract_bv_bychkl <- function (data, bufferradius, outputdir) {
-  #create output directory if it doesnt exist
-  output_dir <- outputdir
-  if (!dir.exists(output_dir)){
-    dir.create(output_dir)
-  }
-  ## get the specific city input
-  city <- data[1,]
-  CN <- city$cityname
-  
-  if(!file.exists(paste0(output_dir, CN, bufferradius, "_builtv_chkl.rds"))){
-  city_rast <- rast(city$LCpath)
-  city_div <- readRDS(city$rds_div) %>% select(1:7)
-  city_div <- vect(city_div, geom = c("longitude", "latitude"), crs = "EPSG:4326") %>% 
-    project(y = city_rast)
-  city_div_buff <- buffer(city_div, width = bufferradius)
-  ## get the area of the buffer
-  polyarea <- expanse(city_div_buff, unit = "m")
-  
-  ## vector needs to be sf for exact_extract
-  city_sfbuff <- st_as_sf(city_div_buff)
-  city_sfbuff$polyarea <- polyarea
-  ### extract the volume of built up area in each buffer
-  city_extractedvalues <- exact_extract(city_rast, city_sfbuff, fun = c("mean","stdev","sum"),
-                                        append_cols = c("checklist_id", "polyarea"))
-  #save to csv
-  write.csv(city_extractedvalues, paste0(output_dir, CN, bufferradius, "_builtv_chkl.csv"))
-  #save to RDS
-  saveRDS(city_extractedvalues, paste0(output_dir, CN, bufferradius, "_builtv_chkl.rds"))
-  }
-  ## return a dataframe of the file names and location of the RDSfile
-  builtv_bycity_df <- tibble(cityname = CN,
-                             rds_builtv = str_c(output_dir, CN, bufferradius, "_builtv_chkl.rds"))
-  return(builtv_bycity_df)
+    #}
 }
-

@@ -19,7 +19,6 @@
 pacman::p_load(tidyverse, ggpubr, RColorBrewer, tictoc,
                ggspatial, sf, terra, tidyterra, rnaturalearth, mapview,
                targets, tarchetypes)
-terraOptions(progress = 10, verbose = F, memfrac = 0.8)
 
 ## Import the urban centres ----
 fuacan <- read_sf("./data/00-ghs_fua_canada.gpkg", layer = "ghs_fua")
@@ -28,7 +27,7 @@ fua_vect <- vect(fuacan)
 ## 2. landcover data from Copernicus, European space agency ----
 # Source: ESA WorldCover 10 m 2021 v200, downloadable here: https://zenodo.org/records/7254221
 ### 2.1. Identify ESA cells that overlap with urban centres ----
-esagrid <- read_sf("./raw_data/esa_worldcover_grid_composites.fgb")
+esagrid <- read_sf("./data/esa_worldcover_grid_composites.fgb")
 
 # identify the cells that overlap with the urban centres
 esalist_fua <- st_intersects(esagrid, fuacan, sparse = F) %>% 
@@ -80,7 +79,7 @@ if(!dir.exists(outputdir)){
 }
 
 # Source: USGS Landsat 8 EVI annual composite, downloaded from Google Earth Engine
-evi_rasters <- list.files("./raw_data/landsat_evi/", full.names = T) %>%
+evi_rasters <- list.files("./data/LANDSAT8_EVI/", full.names = T) %>%
   as_tibble() %>% rename(path = value) %>%
   filter(str_detect(path, "tif$")) %>%
   mutate(filename = basename(path)) %>%
@@ -113,17 +112,7 @@ for (i in 1:length(years)) {
   }
 }
 
-## Import a raster and test if it worked
-list.files("./output/landsat_evi/")
-Wpg_evi2012 <- rast("./output/landsat_evi/winnipeg_EVI_2012.tif")
-Wpg_evi2013 <- rast("./output/landsat_evi/winnipeg_EVI_2013.tif")
-Wpg_evi <- c(Wpg_evi2012, Wpg_evi2013)
-Wpg_vect <- vect(fuacan %>% filter(eFUA_name == "Winnipeg"))
-panel(Wpg_evi, layout = c(1, 2), zlim = c(0, 1), col = rev(terrain.colors(255)),
-      fun=\()lines(Wpg_vect), loc.main="topright")
-
-
-### 5.0 ECOSTRESS dataset: https://ecostress.jpl.nasa.gov/ ----
+### 5.0 ECOSTRESS dataset: https://ecostress.jpl.nasa.gov/ ---- NOT USED
 #https://lpdaac.usgs.gov/data/get-started-data/collection-overview/missions/ecostress-overview/#ecostress-naming-conventions
 ### L3_Meteorological
 dir_met <- "C:/Users/andrewhabrich/OneDrive - Carleton University/GIS storage/ecostress/ECO_L3T_MET"
@@ -199,7 +188,7 @@ lst_sprc <- sprc(lst$path)
 
 ### 6.0 Yale UHI data ----
 # find all the files that are tif
-uhi_summer <- list.files("./raw_data/yceo_summeruhi/", full.names = T) %>% #convert to dataframe
+uhi_summer <- list.files("./data/YCEO_summeruhi/", full.names = T) %>% #convert to dataframe
   as_tibble() %>% rename(path = value) %>%
   #filter to just the tifs
   filter(str_detect(path, "tif$")) %>%
@@ -222,3 +211,23 @@ uhi2010_fua <- crop(uhi2010, fuacan)
 # plot the daytime temperature
 plot(fuacan$geom[1])
 plot(crop(uhi2010_fua$Daytime, fuacan$geom[1]), add = T)
+
+### Canada HRDEM layers ----
+library(biomod2)
+library(terra)
+
+####### Check the HRDEM files ## WIP
+canvec <- vect(fuacan)
+crs(canvec)
+dsmtile1 <- rast("./data/HRDEM/Digital_Surface_Model_(VRT).vrt"); mem_info(dsmtile1)
+dsmtile1vrt <- vrt("./data/HRDEM/Digital_Surface_Model_(VRT).vrt"); mem_info(dsmtile1vrt)
+rprjcanvec <- canvec %>% project(terra::crs(dsmtile1))
+
+## Plot to check
+plot(dsmtile1vrt)
+plot(rprjcanvec, add = T)
+
+crop1 <- crop(dsmtile1, rprjcanvec, mask = T)
+
+dsmtile2 <- rast("./data/HRDEM/Digital_Surface_Model_(VRT) (2).vrt")
+plot(dsmtile1)

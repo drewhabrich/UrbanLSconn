@@ -1,0 +1,503 @@
+---
+title: "Ottawa eBird Checklist Data Analysis"
+author: "Andrew Habrich"
+date: "`r format(Sys.Date(), '%d %B, %Y')`"
+output: 
+  html_document: 
+    toc: true
+    toc_float: true
+    number_sections: true
+    df_print: kable
+    highlight: tango
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+## HEADER---------------------------
+## Script name: X2-singlecity_figures.Rmd
+## 
+## Purpose of script: This script will generate an RMD html file with some preliminary figures and results
+## 
+## Author: Andrew Habrich
+## 
+## Date Created: 2025-01-30
+## Date last Modified: 2025-03-17
+## 
+## Email:
+## - [andrhabr@gmail.com](mailto:andrhabr@gmail.com){.email}
+## - [andrewhabrich@cmail.carleton.ca](mailto:andrewhabrich@cmail.carleton.ca){.email}
+```
+
+```{r knitsetup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(digits = 4)
+```
+
+```{r packagesetup, message=FALSE, warning=FALSE, include=FALSE}
+pacman::p_load(sf, terra, tidyterra, rnaturalearth, mapview, mgcv, gam,
+lme4, mgcv, modelsummary, tidyverse, ggpubr, RColorBrewer, easystats, tictoc)
+```
+
+```{r chkldata, include=FALSE}
+chkl_bufferlist <- readRDS("./_unittest/derived_output/Ottawa_chkl_bufferlist.rds")
+```
+
+All figures for just Ottawa-Gatineau eBird data from 2010-2022
+
+```{r correlations, eval=FALSE, fig.fullwidth=T, include=FALSE, paged.print=TRUE}
+# Plot the correlation between the landscape metrics and raster data for each of the different buffer radius dataframes
+chkl_buffer_correlations <- list() 
+for (i in 1:length(chkl_bufferlist))
+{ 
+chklcor <- chkl_bufferlist[[1]] %>% select(specrich, boundarydist_m,
+uacentrdist_m, ai, iji, contag, mesh, starts_with("p_"), starts_with("bv_"), starts_with("enn")) %>% 
+    correlation(redundant = T)
+  
+chklcorplot <- as.matrix(chklcor) %>% 
+  plot(title = NULL) + 
+  theme_bw() + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) 
+
+chkl_buffer_correlations[[i]] <- chklcorplot 
+rm(chklcor,chklcorplot) 
+}
+
+#chkl_buffer_correlations 
+# ggarrange(plotlist = chkl_buffer_correlations, ncol = 2, nrow = 2, align = "hv", 
+#           common.legend = T, legend = "right",
+# labels = names(chkl_bufferlist))
+print(chkl_buffer_correlations)
+```
+
+# Histograms
+
+## Species richness distribution in each buffer
+
+```{r spprich_hist, echo=FALSE, message=FALSE, warning=FALSE}
+full_histogram <- chkl_bufferlist[[1]] %>% 
+  gghistogram(x = "specrich", binwidth = 1, add = "mean", 
+              rug = T, add_density = T, 
+              alpha = 0.25, color = "black", fill = "darkgreen", 
+              title = "Distribution of Spp.Rich. from eBird Checklists in Ottawa")
+full_histogram
+# filt_histogram <- chkl_bufferlist[[1]] %>% 
+#   filter(p_greencover >= 25 & p_greencover <= 75) %>%
+#   gghistogram(x = "specrich", binwidth = 1, add = "mean", 
+#               rug = T, add_density = T, 
+#               alpha = 0.25, color = "black", fill = "forestgreen", 
+#               title = "Distribution of Spp.Rich. from eBird Checklists in Ottawa") 
+# filt_histogram
+```
+
+## Distribution of proportion tree values in each buffer
+
+```{r ptreehist, echo=FALSE, message=FALSE, warning=FALSE}
+chkl_hist_treed <- list() 
+for (i in 1:length(chkl_bufferlist)) { 
+  histogram <- chkl_bufferlist[[i]] %>% 
+  gghistogram(x = "p_tree", binwidth = 2, add = "mean", 
+              rug = T, add_density = T, 
+              alpha = 0.25, color = "black", fill = "green", title = names(chkl_bufferlist[i])) 
+chkl_hist_treed[[i]] <- histogram 
+rm(histogram) 
+} 
+ggarrange(plotlist = chkl_hist_treed, ncol = 2, nrow = 2, common.legend = T, legend = "right")
+```
+
+## Distribution of combined 'green' LC type in each buffer
+
+```{r pgreen_hist, echo=FALSE, message=FALSE, warning=FALSE}
+## NOTE THIS IS THE COMBINED TREE, SHRUB, GRASS LC types
+chkl_hist_green <- list() 
+for (i in 1:length(chkl_bufferlist)) { 
+  histogram <- chkl_bufferlist[[i]] %>% 
+    gghistogram(x = "p_greencover", binwidth = 2, add = "mean", 
+                rug = T, add_density = T,
+                alpha = 0.25, color = "forestgreen", fill = "grey",
+                title = names(chkl_bufferlist[i])) 
+  chkl_hist_green [[i]] <- histogram 
+  rm(histogram) 
+} 
+histplot <- ggarrange(plotlist = chkl_hist_green, ncol = 2, nrow = 2, common.legend = T, legend = "right") 
+histplot
+
+# export as figure for later
+histplot %>% 
+  ggexport(filename = "./_unittest/derived_output/Ott_chkl_greencover.png")
+```
+
+## Greencover values bound between 25% and 75%
+
+```{r pgreen_selectedhist, echo=FALSE, warning=FALSE}
+chkl_hist_greenfiltered <- list() 
+for (i in 1:length(chkl_bufferlist)) { 
+  histogram <- chkl_bufferlist[[i]] %>% 
+    filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+    gghistogram(x = "p_greencover", binwidth = 1, add = "mean", 
+                rug = T, add_density = T, 
+                alpha = 0.25, color = "black", fill = "forestgreen", 
+                title = names(chkl_bufferlist[i]))
+  chkl_hist_greenfiltered [[i]] <- histogram 
+  rm(histogram) 
+}
+ggarrange(plotlist = chkl_hist_greenfiltered, ncol = 2, nrow = 2, common.legend = T, legend = "right")
+```
+
+## Plot the distribution of proportion builtup values
+
+```{r pbuilt_hist, echo=FALSE, warning=FALSE}
+chkl_hist_builtup <- list() 
+for (i in 1:length(chkl_bufferlist)) { 
+  histogram <- chkl_bufferlist[[i]] %>% 
+    filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+    gghistogram(x = "p_builtup", binwidth = 2, add = "mean", 
+                rug = T, add_density = T, 
+                alpha = 0.25, color = "black", fill = "grey", 
+                title = names(chkl_bufferlist[i]))
+  chkl_hist_builtup[[i]] <- histogram 
+  rm(histogram) 
+  } 
+ggarrange(plotlist = chkl_hist_builtup, ncol = 2, nrow = 2, common.legend = T, legend = "right")
+```
+
+## Distribution of TOTAL building volumes in buffer
+
+```{r bvsum_hist, echo=FALSE, warning=FALSE}
+chkl_hist_bv <- list()
+for (i in 1:length(chkl_bufferlist)) { 
+  histogram <- chkl_bufferlist[[i]] %>% 
+    filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+    mutate(bv_sum_scale = bv_sum/1000) %>% 
+    gghistogram(x = "bv_sum_scale", add = "mean", 
+                rug = T, add_density = T, 
+                alpha = 0.25, color = "black", fill = "violet",
+                title = names(chkl_bufferlist[i])) 
+  chkl_hist_bv[[i]] <- histogram 
+  rm(histogram) 
+  } 
+ggarrange(plotlist = chkl_hist_bv, ncol = 2, nrow = 2, 
+          common.legend = T, legend = "right")
+```
+
+## Distribution of MEAN building volumes in buffer
+
+```{r bvmean_hist, echo=FALSE, warning=FALSE}
+chkl_hist_bv <- list()
+for (i in 1:length(chkl_bufferlist)) { 
+  histogram <- chkl_bufferlist[[i]] %>% 
+    filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+    gghistogram(x = "bv_mean", add = "mean", 
+                rug = T, add_density = T, 
+                alpha = 0.25, color = "black", fill = "purple",
+                title = names(chkl_bufferlist[i])) 
+  chkl_hist_bv[[i]] <- histogram 
+  rm(histogram) 
+  } 
+ggarrange(plotlist = chkl_hist_bv, ncol = 2, nrow = 2, 
+          common.legend = T, legend = "right")
+```
+
+# Scatterplots
+
+## Scatterplot of the greencover and built volume
+
+```{r scatter_green_bv, echo=FALSE, message=FALSE, warning=FALSE}
+chkl_plot_forest.bv <- list()
+for (i in 1:length(chkl_bufferlist)) { 
+  scatterplot <- chkl_bufferlist[[i]] %>% 
+    filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+    ggscatter(x = "p_greencover", y = "bv_mean", 
+              alpha = 0.25, title = names(chkl_bufferlist[i]),
+              color = "forestgreen") 
+  chkl_plot_forest.bv[[i]] <- scatterplot 
+  rm(scatterplot) 
+  } 
+
+ggarrange(plotlist = chkl_plot_forest.bv, ncol = 2, nrow = 2, 
+          common.legend = T, legend = "right")
+```
+
+## Scatterplot of the builtup and built volume
+
+```{r scatter_pbuilt_bv, echo=FALSE, message=FALSE, warning=FALSE}
+chkl_plot_built.bv <- list()
+for (i in 1:length(chkl_bufferlist)) { 
+  scatterplot <- chkl_bufferlist[[i]] %>% 
+    filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+    ggscatter(x = "p_builtup", y = "bv_mean", 
+              alpha = 0.5, title = names(chkl_bufferlist[i])) 
+  chkl_plot_built.bv[[i]] <- scatterplot 
+  rm(scatterplot) 
+} 
+
+ggarrange(plotlist = chkl_plot_built.bv, ncol = 2, nrow = 2, 
+          common.legend = T, legend = "right")
+```
+
+## Scatterplot between both measures of checklist distance
+
+```{r chkldist, echo=FALSE, message=FALSE, warning=FALSE}
+chkl_distances <- chkl_bufferlist[[1]] %>% 
+  filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+  filter(boundarydist_m > 1000) %>% 
+  ggscatter(x = "boundarydist_m", y = "uacentrdist_m", 
+            alpha = 0.5, 
+            title = "Checklist distance to urban area boundary vs centroid", 
+            color = "grey", fill = "grey", 
+            add = "reg.line", add.params = list(color = "red"), 
+            cor.coef = T, cor.method = "pearson") 
+print(chkl_distances)
+
+## export a figure 
+ggexport(chkl_distances, 
+         filename = "./_unittest/derived_output/Ott_chkl_distances.png")
+```
+
+## Check the scatterplot of checklist distances and the p_greencover
+
+```{r chkldists_plots, echo=FALSE, fig.fullwidth=T, message=FALSE, warning=FALSE}
+### Distance to urban area boundary
+chkl_plot_bounddist.greencover <- list()
+for (i in 1:length(chkl_bufferlist)) { 
+  scatterplot <- chkl_bufferlist[[i]] %>% 
+  filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+  filter(boundarydist_m > 1000) %>% 
+    ggscatter(y = "boundarydist_m", x = "p_greencover", 
+              alpha = 0.5, title = names(chkl_bufferlist[i]),
+              color = "olivedrab", fill = "black") 
+  chkl_plot_bounddist.greencover[[i]] <- scatterplot 
+  rm(scatterplot) 
+  } 
+bd <- ggarrange(plotlist = chkl_plot_bounddist.greencover, 
+          ncol = 2, nrow = 2, common.legend = T, legend = "right") 
+bd
+### Distance to urban area centroid 
+chkl_plot_centrdist.greencover <- list() 
+for (i in 1:length(chkl_bufferlist)) { 
+  scatterplot <- chkl_bufferlist[[i]] %>% 
+  filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+  filter(boundarydist_m > 1000) %>% 
+  ggscatter(y = "uacentrdist_m", x = "p_greencover", 
+           alpha = 0.5, title = names(chkl_bufferlist[i]),
+           color = "grey", fill = "black") 
+  chkl_plot_centrdist.greencover[[i]] <- scatterplot 
+  rm(scatterplot) 
+  } 
+ud <- ggarrange(plotlist = chkl_plot_centrdist.greencover, 
+          ncol = 2, nrow = 2, common.legend = T, legend = "right")
+ud
+
+#ggarrange(plotlist = list(bd,ud), nrow = 2, ncol = 1, 
+#          labels = c("Dist. to urban boundary",
+#                     "Dist. to urban centroid"))
+```
+
+# Species richness as the response variable
+
+## Chkl distances against species richness
+
+```{r chkldists_sprich_plots, echo=FALSE, fig.fullwidth=T, message=FALSE, warning=FALSE}
+### Distance to urban area boundary
+chkl_plot_bounddist.spr <- list()
+for (i in 1:length(chkl_bufferlist)) { 
+  scatterplot <- chkl_bufferlist[[i]] %>% 
+  filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+  filter(boundarydist_m > 1000) %>% 
+    ggscatter(x = "boundarydist_m", y = "specrich", 
+              alpha = 0.5, title = names(chkl_bufferlist[i]),
+              color = "olivedrab", fill = "black",
+              add = "reg.line", add.params = list(color = "red")) 
+  chkl_plot_bounddist.greencover[[i]] <- scatterplot 
+  rm(scatterplot) 
+  } 
+bd <- ggarrange(plotlist = chkl_plot_bounddist.greencover, 
+          ncol = 2, nrow = 2, common.legend = T, legend = "right") 
+bd
+### Distance to urban area centroid 
+chkl_plot_centrdist.spr <- list() 
+for (i in 1:length(chkl_bufferlist)) { 
+  scatterplot <- chkl_bufferlist[[i]] %>% 
+  filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+  filter(boundarydist_m > 1000) %>% 
+  ggscatter(x = "uacentrdist_m", y = "specrich", 
+           alpha = 0.5, title = names(chkl_bufferlist[i]),
+           color = "grey", fill = "black",
+           add = "reg.line", add.params = list(color = "red")) 
+  chkl_plot_centrdist.greencover[[i]] <- scatterplot 
+  rm(scatterplot) 
+  } 
+ud <- ggarrange(plotlist = chkl_plot_centrdist.greencover, 
+          ncol = 2, nrow = 2, common.legend = T, legend = "right")
+ud
+
+#ggarrange(plotlist = list(bd,ud), nrow = 2, ncol = 1, 
+#          labels = c("Dist. to urban boundary",
+#                     "Dist. to urban centroid"))
+```
+
+## Species richness vs prop. greencover
+
+```{r spprich_scatter, echo=FALSE, fig.fullwidth=T, message=FALSE, warning=FALSE}
+chkl_plot_specrich <- list() 
+for (i in 1:length(chkl_bufferlist)) { 
+  scatterplot <- chkl_bufferlist[[i]] %>% 
+    filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+    filter(boundarydist_m > 1000) %>% 
+    ggscatter(x = "p_greencover", y = "specrich", 
+              alpha = 0.10, title = names(chkl_bufferlist[i]), 
+              color = "forestgreen", fill = "black", 
+              add = "reg.line", add.params = list(color = "red"), 
+              cor.coef = T, cor.method = "pearson")
+  chkl_plot_specrich[[i]] <- scatterplot 
+  rm(scatterplot) 
+ } 
+ggarrange(plotlist = chkl_plot_specrich, 
+          ncol = 2, nrow = 2, common.legend = T, legend = "right")
+```
+
+## Species richness vs ai, iji, mesh, contag, ENN
+
+For the 500m buffer radius
+
+```{r spprich_lsmetrics, echo=FALSE, fig.fullwidth=T, message=FALSE, warning=FALSE}
+df500m <- chkl_bufferlist[[1]]
+ai <- df500m %>% 
+  filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+  ggscatter(x = "ai", y = "specrich", alpha = 0.5, 
+            title = "AI", color = "forestgreen", fill = "green", 
+            add = "reg.line", add.params = list(color = "black")) 
+iji <- df500m %>% 
+  filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+  ggscatter(x = "iji", y = "specrich", alpha = 0.5, 
+            title = "IJI", color = "forestgreen", fill = "green", 
+            add = "reg.line", add.params = list(color = "black")) 
+contag <- df500m %>% 
+  filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+  ggscatter(x = "contag", y = "specrich", alpha = 0.5, 
+            title = "Contagion index", 
+            color = "forestgreen", fill = "green", 
+            add = "reg.line", add.params = list(color = "black")) 
+mesh <- df500m %>% 
+  filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+  ggscatter(x = "mesh", y = "specrich", alpha = 0.5, 
+            title = "MESH index", 
+            color = "forestgreen", fill = "green", 
+            add = "reg.line", add.params = list(color = "black"))
+ennm <- df500m %>% 
+  filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+  ggscatter(x = "ennm_tree", y = "specrich", alpha = 0.5, 
+            title = "Mean ENN distance", 
+            color = "forestgreen", fill = "green", 
+            add = "reg.line", add.params = list(color = "black"))
+ennsd <- df500m %>% 
+  filter(p_greencover >= 25 & p_greencover <= 75) %>% 
+  ggscatter(x = "ennsd_tree", y = "specrich", alpha = 0.5, 
+            title = "SD ENN distance", 
+            color = "forestgreen", fill = "green", 
+            add = "reg.line", add.params = list(color = "black"))
+
+ggarrange(plotlist = list(ai, iji, contag, mesh, ennm, ennsd), nrow = 3, ncol = 2)
+```
+
+# Modelling: GLMs and GAMs
+
+```{r modelling, message=FALSE, warning=FALSE, include=FALSE}
+pacman::p_load(mgcv, lme4, MuMIn, easystats, modelsummary, DHARMa, knitr) 
+### NEED TO ACCOUNT FOR SAMPLING EFFORT (distance travelled, duration)
+### NEED TO ACCOUNT FOR TEMPORAL SAMPLING (month; year was a flat line)
+```
+
+## Generalized linear model
+
+```{r simplemodel, message=FALSE, warning=FALSE, include=FALSE}
+df <- chkl_bufferlist[[1]] %>% 
+    filter(p_greencover > 25 & p_greencover < 75)
+glm_mod <- glm(specrich ~ 
+               p_greencover + bv_mean + uacentrdist_m + ennm_tree +
+               ai + iji + contag + mesh + 
+               offset(log(duration_minutes)) + offset(log(effort_distance_km)), 
+               family = "gaussian", data = df) 
+```
+
+```{r modelstr, echo=TRUE, message=FALSE, warning=FALSE}
+#Using this model
+find_formula(glm_mod)$conditional
+```
+
+```{r glm_table, echo=FALSE, message=FALSE, warning=FALSE}
+#Create a list and generate a model for each buffer radius
+glm_mods <- list()
+for (i in 1:length(chkl_bufferlist)) { 
+  df <- chkl_bufferlist[[i]] %>% 
+    filter(p_greencover > 25 & p_greencover < 75)
+  glm_mod <- glm(specrich ~ 
+                   p_greencover + bv_mean + uacentrdist_m + ennm_tree +
+                   ai + iji + contag + mesh + 
+                   offset(log(duration_minutes)) + offset(log(effort_distance_km)), 
+                 family = "gaussian", data = df) 
+glm_mods[[i]] <- glm_mod
+names(glm_mods)[i] <- names(chkl_bufferlist)[i]
+rm(glm_mod) 
+}
+# Compare the performance of the models
+comparetab <- compare_performance(glm_mods, metrics = "all", estimator = "REML")
+#kable table
+kable(comparetab)
+```
+
+```{r modelparameters, echo=FALSE, message=FALSE, warning=FALSE}
+model_res <- model_parameters(glm_mods[[1]], robust = T)
+plot(model_res)
+# model_param <- standardize_parameters(model = glm_mods[[1]], method = "refit")
+# plot(model_param)
+```
+
+# Generalized additive model
+
+```{r nullgams, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+gam_null1 <- gam(specrich ~ 1 + offset(log(duration_minutes)), 
+                 family = "gaussian", data = chkl_bufferlist[[1]],
+                 subset = p_greencover > 25 & p_greencover < 75) 
+
+gam_null2 <- gam(specrich ~ 1 + offset(log(effort_distance_km)), 
+                 family = "gaussian", data = chkl_bufferlist[[1]],
+                 subset = p_greencover > 25 & p_greencover < 75) 
+
+gam_null3 <- gam(specrich ~ 1 + 
+                   offset(log(duration_minutes)) + 
+                   offset(log(effort_distance_km)), 
+                 family = "gaussian", data = chkl_bufferlist[[1]],
+                 subset = p_greencover > 25 & p_greencover < 75)
+#model_performance(gam_null1, gam_null2, gam_null3)
+
+```
+
+## GAMS with smoothing terms and offsets for sampling effort
+
+```{r gams, echo=FALSE, message=FALSE, warning=FALSE}
+df <- chkl_bufferlist[[1]] %>% 
+  filter(p_greencover > 25 & p_greencover < 75)
+gam_mods <- mgcv::gam(specrich ~ 
+                  s(p_greencover, k = 12) + bv_mean + 
+                  ai + iji + contag + mesh + ennm_tree +
+                  month + uacentrdist_m +
+                  offset(log(duration_minutes)) + 
+                  offset(log(effort_distance_km)), 
+                family = "gaussian", data = df, method = "REML") 
+model_parameters(gam_mods)
+```
+
+```{r gam_viz, echo=FALSE, message=FALSE, warning=FALSE}
+# ## check the results of the gam
+#par(mfrow = c(2, 2)) 
+#gam.check(gam_mods)
+performance::check_model(gam_mods, residual_type = "normal")
+
+# Plot the fitted line of the smoothed p_greencover in a ggplot
+# ggplot(chkl_bufferlist[[1]],
+#        aes(x = p_greencover, y = specrich)) +
+#   geom_point() +
+#   geom_line(colour = "red", linewidth = 1.2,
+#             aes(y = fitted(gam_mods))) +
+#   theme_bw()
+```
